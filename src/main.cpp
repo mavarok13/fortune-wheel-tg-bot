@@ -1,4 +1,6 @@
 #include "bot/BotController.hpp"
+#include "domain/WheelManager.hpp"
+#include "storage/InMemoryStorage.hpp"
 #include "telegram/TelegramClient.hpp"
 
 #include <nlohmann/json.hpp>
@@ -17,7 +19,9 @@ int main() {
 
     try {
         TelegramClient client(token);
-        BotController controller(client);
+        WheelManager wheelManager;
+        InMemoryStorage storage;
+        BotController controller(client, wheelManager, storage);
 
         const auto me = client.getMe();
         std::cout << "getMe response: " << me.dump(2) << std::endl;

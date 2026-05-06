@@ -21,6 +21,7 @@ add_executable(FortuneWheelBot
     src/domain/Wheel.cpp
     src/domain/WheelManager.cpp
     src/storage/InMemoryStorage.cpp
+    src/bot/CommandParser.cpp
     src/bot/BotController.cpp
     src/bot/SpinAnimationService.cpp
 )

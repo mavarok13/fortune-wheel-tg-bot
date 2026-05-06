@@ -1,27 +1,24 @@
 #include "InMemoryStorage.hpp"
 
-#include <stdexcept> 
+#include "domain/DomainExceptions.hpp"
 
-Wheel & InMemoryStorage::getWheel(int64_t userId, int64_t wheelId) {
-    std::string fullWheelId = std::to_string(userId) + "_" + std::to_string(wheelId);
-    return wheels_[fullWheelId];
-}
-
-uint64_t InMemoryStorage::addWheel(int64_t userId, const Wheel & wheel) {
-    uint64_t prevWheelId = lastWheelId_++;
-    std::string fullWheelId = std::to_string(userId) + "_" + std::to_string(prevWheelId);
-    wheels_[fullWheelId] = wheel;
-    
-    return prevWheelId;
-}
-
-void InMemoryStorage::removeWheel(int64_t userId, int64_t wheelId) {
-    std::string fullWheelId = std::to_string(userId) + "_" + std::to_string(wheelId);
-    const auto wheelIt = wheels_.find(fullWheelId);
-
-    if (wheelIt != wheels_.end()) {
-        wheels_.erase(wheelIt);
-    } else {
-        throw std::out_of_range("Wheel not found");
+Wheel& InMemoryStorage::getWheel(const std::string& wheelStorageId) {
+    const auto wheelIt = wheels_.find(wheelStorageId);
+    if (wheelIt == wheels_.end()) {
+        throw WheelNotFoundException("Wheel not found: " + wheelStorageId);
     }
+    return wheelIt->second;
+}
+
+void InMemoryStorage::addWheel(const std::string& wheelStorageId, const Wheel& wheel) {
+    wheels_[wheelStorageId] = wheel;
+    ++lastIWheelId_;
+}
+
+void InMemoryStorage::removeWheel(const std::string& wheelStorageId) {
+    const auto wheelIt = wheels_.find(wheelStorageId);
+    if (wheelIt == wheels_.end()) {
+        throw WheelNotFoundException("Wheel not found: " + wheelStorageId);
+    }
+    wheels_.erase(wheelIt);
 }

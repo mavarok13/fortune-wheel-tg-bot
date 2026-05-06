@@ -2,13 +2,13 @@
 
 #include "domain/Wheel.hpp"
 
-#include <cstdint>
+#include <string>
 
 class Storage {
 public:
     virtual ~Storage() = default;
 
-    virtual Wheel & getWheel(int64_t userId, int64_t wheelId) = 0;
-    virtual uint64_t addWheel(int64_t userId, const Wheel & wheel) = 0;
-    virtual void removeWheel(int64_t userId, int64_t wheelId) = 0;
+    virtual Wheel& getWheel(const std::string& wheelStorageId) = 0;
+    virtual void addWheel(const std::string& wheelStorageId, const Wheel& wheel) = 0;
+    virtual void removeWheel(const std::string& wheelStorageId) = 0;
 };
