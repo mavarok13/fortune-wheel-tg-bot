@@ -50,7 +50,7 @@ HttpResponse HttpClient::send(HttpRequest request) {
 
     beast::error_code ec;
     stream.shutdown(ec);
-    if (ec == asio::error::eof) {
+    if (ec == asio::error::eof || ec == asio::ssl::error::stream_truncated) {
         ec = {};
     }
     if (ec) {

@@ -1,4 +1,5 @@
 #include "BotController.hpp"
+#include "BotCommands.hpp"
 
 #include <iostream>
 
@@ -19,19 +20,18 @@ void BotController::handleUpdate(const nlohmann::json& update) {
 
         if (message.contains("text") && message["text"].is_string()) {
             // TODO: Implement command parsing and inline mode support:
-            // @fortunewheel add: <name>
-            // @fortunewheel wheeledit:
-            // @fortunewheel foredit: <name>
-            // @fortunewheel delete: <name>
-            // @fortunewheel wheelsave: <name>
-            // @fortunewheel choose
-            // @fortunewheel choose: <name>
-            // @fortunewheel mode
-            // @fortunewheel spin
-            // @fortunewheel reset
-            // @fortunewheel clear
-            // @fortunewheel deletewheel
-            telegramClient_.sendMessage(chatId, "FortuneWheelBot is running. Command parsing will be implemented later.");
+            // @auctionwheelbot itemadd: <item name>
+            // @auctionwheelbot itemedit: <item name>
+            // @auctionwheelbot itemremove: <item name>
+            // @auctionwheelbot itemslist
+            // @auctionwheelbot wheelsave: <wheel name>
+            // @auctionwheelbot wheelchoose: <wheel name>
+            // @auctionwheelbot wheelmode: <mode name>
+            // @auctionwheelbot wheeldelete: <wheel name>
+            // @auctionwheelbot wheelspin
+            // @auctionwheelbot wheelreset
+            // @auctionwheelbot wheelclear
+            // @auctionwheelbot wheelslist
         }
     } catch (const std::exception& ex) {
         std::cerr << "Failed to handle update: " << ex.what() << std::endl;

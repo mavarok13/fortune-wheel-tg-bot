@@ -6,8 +6,11 @@
 
 class InMemoryStorage : public Storage {
 public:
-    Wheel& getWheel(int64_t chatId) override;
+    Wheel & getWheel(int64_t userId, int64_t wheelId) override;
+    uint64_t addWheel(int64_t userId, const Wheel & wheel) override;
+    void removeWheel(int64_t userId, int64_t wheelId) override;
 
 private:
-    std::unordered_map<int64_t, Wheel> wheels_;
+    std::unordered_map<std::string, Wheel> wheels_;
+    int64_t lastWheelId_ = 0;
 };

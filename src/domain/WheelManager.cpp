@@ -2,10 +2,15 @@
 
 #include <random>
 #include <vector>
+#include <stdexcept> 
 
-std::optional<size_t> WheelManager::chooseIndex(const Wheel& wheel) {
+std::optional<size_t> WheelManager::chooseIndex() {
+    if (!currentWheel_) {
+        throw std::logic_error("Wheel not selected");
+    }
+
     std::vector<size_t> active;
-    const auto& items = wheel.items();
+    const auto& items = currentWheel_->items();
     for (size_t i = 0; i < items.size(); ++i) {
         if (items[i].active) {
             active.push_back(i);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "telegram/TelegramClient.hpp"
+#include "domain/WheelManager.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -12,4 +13,5 @@ public:
 
 private:
     TelegramClient& telegramClient_;
+    WheelManager wheelManager_;
 };
