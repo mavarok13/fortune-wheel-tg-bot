@@ -6,18 +6,23 @@
 inline constexpr char CommandArgumentSeparator = ':';
 
 enum class BotCommandType {
-    Add,
-    WheelEdit,
-    ForEdit,
-    Delete,
+    Start,
+    Help,
+    ItemAdd,
+    ItemEdit,
+    ItemRemove,
+    ItemsList,
     WheelSave,
-    Choose,
-    Mode,
-    Spin,
-    Reset,
-    Clear,
-    DeleteWheel,
-    Unknown
+    WheelChoose,
+    WheelMode,
+    WheelSpin,
+    WheelReset,
+    WheelClear,
+    WheelDelete,
+    WheelsList,
+    WheelNew,
+    Unknown,
+    Secret
 };
 
 struct ParsedCommand {

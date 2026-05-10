@@ -9,6 +9,8 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace {
 std::string toLower(std::string value) {
@@ -16,6 +18,35 @@ std::string toLower(std::string value) {
         return static_cast<char>(std::tolower(ch));
     });
     return value;
+}
+
+std::string trim(std::string_view value) {
+    auto begin = value.begin();
+    auto end = value.end();
+
+    while (begin != end && std::isspace(static_cast<unsigned char>(*begin))) {
+        ++begin;
+    }
+    while (begin != end && std::isspace(static_cast<unsigned char>(*(end - 1)))) {
+        --end;
+    }
+
+    return std::string(begin, end);
+}
+
+std::pair<std::string, std::string> parseItemRenameArgument(const std::string& value) {
+    const auto separatorPos = value.find(CommandArgumentSeparator);
+    if (separatorPos == std::string::npos) {
+        throw InvalidWheelOperationException("Use itemedit:old name:new name");
+    }
+
+    const auto oldName = trim(value.substr(0, separatorPos));
+    const auto newName = trim(value.substr(separatorPos + 1));
+    if (oldName.empty() || newName.empty()) {
+        throw InvalidWheelOperationException("Use itemedit:old name:new name");
+    }
+
+    return {oldName, newName};
 }
 
 WheelMode wheelModeFromArgument(const std::string& value) {
@@ -114,87 +145,130 @@ void BotController::handleUpdate(const nlohmann::json& update) {
 }
 
 void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCommand& command) {
-    switch (command.type) {
-    case BotCommandType::Add: {
-        const auto itemName = requireArgument(command, "add");
-        selectCurrentWheelForUser(userId);
-        wheelManager_.addItem(itemName);
-        reply(chatId, "Added item: " + itemName);
-        return;
-    }
-    case BotCommandType::WheelSave: {
-        const auto wheelName = requireArgument(command, "wheelsave");
-        Wheel wheel;
-        const auto storageId = makeWheelStorageId(userId, wheelName);
-        storage_.addWheel(storageId, wheel);
-        wheelManager_.setCurrentWheel(storage_.getWheel(storageId));
-        currentWheelStorageIds_[userId] = storageId;
-        reply(chatId, "Wheel saved and selected: " + wheelName);
-        return;
-    }
-    case BotCommandType::Choose: {
-        const auto wheelName = requireArgument(command, "choose");
-        const auto storageId = makeWheelStorageId(userId, wheelName);
+    const std::string userKey = std::to_string(userId);
+    const auto selectLastWheelForUser = [&]() -> bool {
         try {
-            wheelManager_.setCurrentWheel(storage_.getWheel(storageId));
+            wheelManager_.setCurrentWheel(storage_.getUserLastWheel(userKey));
+            return true;
         } catch (const WheelNotFoundException&) {
-            reply(chatId, "Wheel not found: " + wheelName);
-            return;
-        }
-        currentWheelStorageIds_[userId] = storageId;
-        reply(chatId, "Selected wheel: " + wheelName);
-        return;
-    }
-    case BotCommandType::DeleteWheel: {
-        const auto wheelName = requireArgument(command, "deletewheel");
-        const auto storageId = makeWheelStorageId(userId, wheelName);
-        try {
-            storage_.removeWheel(storageId);
-        } catch (const WheelNotFoundException&) {
-            reply(chatId, "Wheel not found: " + wheelName);
-            return;
-        }
-        const auto currentIt = currentWheelStorageIds_.find(userId);
-        if (currentIt != currentWheelStorageIds_.end() && currentIt->second == storageId) {
             wheelManager_.clearCurrentWheel();
-            currentWheelStorageIds_.erase(currentIt);
+            return false;
         }
-        reply(chatId, "Deleted wheel: " + wheelName);
+    };
+
+    switch (command.type) {
+    case BotCommandType::Secret: {
+        reply(chatId, "Я ЛЮБЛЮ ТЕБЯ, МОЯ КИСОНЬКА! <3");
         return;
     }
-    case BotCommandType::Delete: {
-        const auto itemName = requireArgument(command, "delete");
-        selectCurrentWheelForUser(userId);
-        try {
-            wheelManager_.removeItem(itemName);
-        } catch (const WheelItemNotFoundException&) {
-            reply(chatId, "Item not found: " + itemName);
+    case BotCommandType::ItemAdd: {
+        if (!selectLastWheelForUser()) {
+            storage_.addTempWheel(userKey, Wheel{});
+            setCurrentWheel(userKey, userKey, true);
+        }
+
+        const auto itemName = requireArgument(command);
+        wheelManager_.addItem(itemName);
+        const auto wheelName = wheelManager_.currentWheel().getName();
+        if (wheelName.empty()) {
+            reply(chatId, "Added item \"" + itemName + "\".");
+        } else {
+            reply(chatId, "Added item \"" + itemName + "\" to wheel \"" + wheelName + "\".");
+        }
+        return;
+    }
+    case BotCommandType::ItemEdit: {
+        if (!selectLastWheelForUser()) {
+            reply(chatId, "Wheel not selected. Try add new item or select wheel");
             return;
         }
+
+        const auto renameArgument = requireArgument(command);
+        const auto [oldName, newName] = parseItemRenameArgument(renameArgument);
+        wheelManager_.currentWheel().renameItem(oldName, newName);
+        reply(chatId, "Renamed item \"" + oldName + "\" to \"" + newName + "\".");
+        return;
+    }
+    case BotCommandType::ItemRemove: {
+        if (!selectLastWheelForUser()) {
+            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            return;
+        }
+
+        const auto itemName = requireArgument(command);
+        wheelManager_.removeItem(itemName);
         reply(chatId, "Deleted item: " + itemName);
         return;
     }
-    case BotCommandType::ForEdit: {
-        const auto itemName = requireArgument(command, "foredit");
-        selectCurrentWheelForUser(userId);
-        if (!wheelManager_.currentWheel().containsItem(itemName)) {
-            reply(chatId, "Item not found: " + itemName);
+    case BotCommandType::WheelSave: {
+        if (!selectLastWheelForUser()) {
+            reply(chatId, "Wheel not selected. Try add new item or select wheel");
             return;
         }
-        // TODO: Add per-user pending state for PendingAction::EditItemName.
-        reply(chatId, "Editing is not interactive yet. Later this command will ask for a new item name.");
+
+        auto & currentWheel = wheelManager_.currentWheel();
+        std::string wheelName = requireArgument(command);
+        const auto wheelId = makeWheelStorageId(userId, wheelName);
+        currentWheel.setName(wheelName);
+        storage_.addWheel(wheelId, currentWheel);
+        setCurrentWheel(userKey, wheelId);
+        reply(chatId, "Wheel saved and selected: " + wheelName);
         return;
     }
-    case BotCommandType::Mode: {
-        const auto modeArgument = requireArgument(command, "mode");
+    case BotCommandType::ItemsList: {
+        if (!selectLastWheelForUser()) {
+            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            return;
+        }
+
+        auto & wheel = wheelManager_.currentWheel();
+        if (wheel.items().empty()) {
+            reply(chatId, "Wheel \"" + wheel.getName() + "\" has no items.");
+            return;
+        }
+
+        std::string itemsListStr = "Wheel \"" + wheel.getName() + "\" items list:\n";
+        for (const auto & item : wheel.items()) {
+            itemsListStr += "- " + item.name;
+            if (!item.active) {
+                itemsListStr += " (inactive)";
+            }
+            itemsListStr += "\n";
+        }
+
+        reply(chatId, itemsListStr);
+        return;
+    }
+    case BotCommandType::WheelChoose: {
+        const auto wheelName = requireArgument(command);
+        const auto storageId = makeWheelStorageId(userId, wheelName);
+        try {
+            setCurrentWheel(userKey, storageId);
+        } catch (const WheelNotFoundException&) {
+            reply(chatId, "Wheel not found: " + wheelName);
+            return;
+        }
+        reply(chatId, "Selected wheel: " + wheelName);
+        return;
+    }
+    case BotCommandType::WheelMode: {
+        if (!selectLastWheelForUser()) {
+            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            return;
+        }
+
+        const auto modeArgument = requireArgument(command);
         const auto mode = wheelModeFromArgument(modeArgument);
-        selectCurrentWheelForUser(userId);
         wheelManager_.setMode(mode);
         reply(chatId, "Mode set to: " + wheelModeToString(mode));
         return;
     }
-    case BotCommandType::Spin: {
-        selectCurrentWheelForUser(userId);
+    case BotCommandType::WheelSpin: {
+        if (!selectLastWheelForUser()) {
+            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            return;
+        }
+
         const auto selectedIndex = wheelManager_.chooseIndex();
         if (!selectedIndex.has_value()) {
             reply(chatId, "No active items to select.");
@@ -206,43 +280,105 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
         if (wheel.mode() == WheelMode::Elimination) {
             wheel.deactivateItem(*selectedIndex);
         }
-        // TODO: Later this should use SpinAnimationService and editMessageText.
+
         reply(chatId, "Selected: " + selectedItemName);
         return;
     }
-    case BotCommandType::Reset:
-        selectCurrentWheelForUser(userId);
+    case BotCommandType::WheelReset:
+        if (!selectLastWheelForUser()) {
+            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            return;
+        }
+
         wheelManager_.reset();
         reply(chatId, "Wheel reset.");
         return;
-    case BotCommandType::Clear:
-        selectCurrentWheelForUser(userId);
+    case BotCommandType::WheelClear:
+        if (!selectLastWheelForUser()) {
+            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            return;
+        }
+
         wheelManager_.clear();
         reply(chatId, "Wheel cleared.");
         return;
-    case BotCommandType::WheelEdit:
+    case BotCommandType::WheelDelete: {
+        const auto wheelName = requireArgument(command);
+        const auto storageId = makeWheelStorageId(userId, wheelName);
+        const bool deletedCurrentWheel = selectLastWheelForUser() && wheelManager_.currentWheel().getName() == wheelName;
+
+        try {
+            storage_.removeWheel(storageId);
+        } catch (const WheelNotFoundException&) {
+            reply(chatId, "Wheel not found: " + wheelName);
+            return;
+        }
+
+        if (deletedCurrentWheel) {
+            storage_.addTempWheel(userKey, Wheel{});
+            setCurrentWheel(userKey, userKey, true);
+        }
+
+        reply(chatId, "Deleted wheel: " + wheelName);
+        return;
+    }
+    case BotCommandType::WheelNew: {
+        storage_.addTempWheel(userKey, Wheel{});
+        std::string wheelId = userKey;
+        setCurrentWheel(userKey, wheelId, true);
+        reply(chatId, "New wheel created");
+        return;
+    }
+    case BotCommandType::WheelsList: {
+        const auto wheelNames = storage_.listWheelNamesForUser(userKey);
+        if (wheelNames.empty()) {
+            reply(chatId, "No saved wheels.");
+            return;
+        }
+
+        std::string currentWheelName;
+        if (selectLastWheelForUser()) {
+            currentWheelName = wheelManager_.currentWheel().getName();
+        }
+
+        std::string wheelList = "Saved wheels:\n";
+        for (const auto& wheelName : wheelNames) {
+            wheelList += "- " + wheelName;
+            if (wheelName == currentWheelName) {
+                wheelList += " (selected)";
+            }
+            wheelList += "\n";
+        }
+
+        reply(chatId, wheelList);
+        return;
+    }
     case BotCommandType::Unknown:
         reply(chatId, "Unknown command.");
         return;
     }
 }
 
-Wheel& BotController::selectCurrentWheelForUser(int64_t userId) {
-    const auto currentIt = currentWheelStorageIds_.find(userId);
-    if (currentIt == currentWheelStorageIds_.end()) {
-        throw WheelNotSelectedException("Wheel not selected");
+void BotController::setCurrentWheel(const std::string & userId, const std::string & wheelId, bool isTemp) {
+    if (isTemp) {
+        Wheel& wheel = storage_.getTempWheel(wheelId);
+        wheelManager_.setCurrentWheel(wheel);
+    } else {
+        Wheel& wheel = storage_.getWheel(wheelId);
+        wheelManager_.setCurrentWheel(wheel);
     }
 
-    Wheel& wheel = storage_.getWheel(currentIt->second);
-    wheelManager_.setCurrentWheel(wheel);
-    return wheel;
+    storage_.setUserLastWheel(userId, wheelId);
 }
 
-std::string BotController::requireArgument(const ParsedCommand& command, const std::string& commandName) const {
+std::string BotController::requireArgument(const ParsedCommand& command) const {
     if (!command.argument.has_value() || command.argument->empty()) {
-        throw InvalidWheelOperationException("Missing argument for command: " + commandName);
+        throw InvalidWheelOperationException("Missing argument for command");
     }
     return *command.argument;
 }
 
-void BotController::reply(int64_t chatId, const std::string& text) { telegramClient_.sendMessage(chatId, text); }
+void BotController::reply(int64_t chatId, const std::string& text) {
+    std::cerr << "Replying to chat " << chatId << " with text=" << text << std::endl;
+    telegramClient_.sendMessage(chatId, text);
+}

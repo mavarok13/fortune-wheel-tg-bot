@@ -38,6 +38,13 @@ int main() {
                     if (update.contains("update_id") && update["update_id"].is_number_integer()) {
                         offset = update["update_id"].get<int>() + 1;
                     }
+
+                    if (update.contains("message") && update["message"].is_object()
+                        && update["message"].contains("text") && update["message"]["text"].is_string()) {
+                        std::cerr << "Handling update " << update.value("update_id", -1)
+                                  << " text=" << update["message"]["text"].get<std::string>() << std::endl;
+                    }
+
                     controller.handleUpdate(update);
                 }
             } catch (const std::exception& ex) {

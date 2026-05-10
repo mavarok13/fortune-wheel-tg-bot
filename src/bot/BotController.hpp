@@ -19,13 +19,12 @@ public:
 
 private:
     void handleCommand(int64_t chatId, int64_t userId, const ParsedCommand& command);
-    std::string requireArgument(const ParsedCommand& command, const std::string& commandName) const;
-    Wheel& selectCurrentWheelForUser(int64_t userId);
+    std::string requireArgument(const ParsedCommand& command) const;
+    void setCurrentWheel(const std::string & userId, const std::string & wheelId, bool isTemp=false);
     void reply(int64_t chatId, const std::string& text);
 
     TelegramClient& telegramClient_;
     WheelManager& wheelManager_;
     Storage& storage_;
     CommandParser commandParser_;
-    std::unordered_map<int64_t, std::string> currentWheelStorageIds_;
 };

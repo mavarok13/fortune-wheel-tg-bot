@@ -65,6 +65,8 @@ nlohmann::json TelegramClient::performJsonRequest(HttpRequest request, const std
     auto parsed = nlohmann::json::parse(response.body());
     if (!parsed.value("ok", false)) {
         std::cerr << "Telegram API error for method " << methodName << ": " << parsed.dump() << std::endl;
+        const auto description = parsed.value("description", std::string{"Unknown Telegram API error"});
+        throw std::runtime_error("Telegram API error for method " + methodName + ": " + description);
     }
     return parsed;
 }

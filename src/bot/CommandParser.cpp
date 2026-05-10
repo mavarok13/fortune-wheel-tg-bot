@@ -30,19 +30,34 @@ std::string toLower(std::string value) {
     return value;
 }
 
+std::string_view trimView(std::string_view value) {
+    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
+        value.remove_prefix(1);
+    }
+    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
+        value.remove_suffix(1);
+    }
+    return value;
+}
+
 BotCommandType commandTypeFromName(const std::string& commandName) {
     static const std::unordered_map<std::string_view, BotCommandType> commandTypes{
-        {ITEM_ADD_COMMAND, BotCommandType::Add},
-        {WHEEL_EDIT_COMMAND, BotCommandType::WheelEdit},
-        {ITEM_EDIT_COMMAND, BotCommandType::ForEdit},
-        {ITEM_REMOVE_COMMAND, BotCommandType::Delete},
+        {START_COMMAND, BotCommandType::Start},
+        {HELP_COMMAND, BotCommandType::Help},
+        {ITEM_ADD_COMMAND, BotCommandType::ItemAdd},
+        {ITEM_EDIT_COMMAND, BotCommandType::ItemEdit},
+        {ITEM_REMOVE_COMMAND, BotCommandType::ItemRemove},
+        {ITEMS_LIST_COMMAND, BotCommandType::ItemsList},
         {WHEEL_SAVE_COMMAND, BotCommandType::WheelSave},
-        {WHEEL_CHOOSE_COMMAND, BotCommandType::Choose},
-        {WHEEL_MODE_COMMAND, BotCommandType::Mode},
-        {WHEEL_SPIN_COMMAND, BotCommandType::Spin},
-        {WHEEL_RESET_COMMAND, BotCommandType::Reset},
-        {WHEEL_CLEAR_COMMAND, BotCommandType::Clear},
-        {WHEEL_DELETE_COMMAND, BotCommandType::DeleteWheel},
+        {WHEEL_CHOOSE_COMMAND, BotCommandType::WheelChoose},
+        {WHEEL_DELETE_COMMAND, BotCommandType::WheelDelete},
+        {WHEEL_MODE_COMMAND, BotCommandType::WheelMode},
+        {WHEEL_SPIN_COMMAND, BotCommandType::WheelSpin},
+        {WHEEL_RESET_COMMAND, BotCommandType::WheelReset},
+        {WHEEL_CLEAR_COMMAND, BotCommandType::WheelClear},
+        {WHEELS_LIST_COMMAND, BotCommandType::WheelsList},
+        {WHEEL_NEW_COMMAND, BotCommandType::WheelNew},
+        {SECRET_COMMAND, BotCommandType::Secret}
     };
 
     const auto it = commandTypes.find(commandName);
@@ -56,13 +71,19 @@ BotCommandType commandTypeFromName(const std::string& commandName) {
 CommandParser::CommandParser(std::string botTag) : botTag_(std::move(botTag)) {}
 
 std::optional<ParsedCommand> CommandParser::parse(const std::string& text) const {
-    if (text.rfind(botTag_, 0) != 0) {
+    std::string_view rest = trimView(text);
+    if (rest.empty()) {
         return std::nullopt;
     }
 
-    std::string_view rest(text.data() + botTag_.size(), text.size() - botTag_.size());
-    rest = std::string_view(rest.data(), rest.size());
-    const auto separatorPos = rest.find(CommandArgumentSeparator);
+    if (rest.rfind(botTag_, 0) == 0) {
+        rest.remove_prefix(botTag_.size());
+    } else if (rest.front() == '/') {
+        rest.remove_prefix(1);
+    }
+    rest = trimView(rest);
+
+    const auto separatorPos = rest.find_first_of(std::string_view{":"});
 
     std::string rawCommand;
     std::optional<std::string> argument;
@@ -73,9 +94,15 @@ std::optional<ParsedCommand> CommandParser::parse(const std::string& text) const
         argument = trim(rest.substr(separatorPos + 1));
     }
 
+    const auto mentionSeparatorPos = rawCommand.find('@');
+    if (mentionSeparatorPos != std::string::npos) {
+        rawCommand.erase(mentionSeparatorPos);
+    }
+
     ParsedCommand parsed;
     parsed.rawCommand = rawCommand;
     parsed.type = commandTypeFromName(toLower(rawCommand));
     parsed.argument = std::move(argument);
+
     return parsed;
 }

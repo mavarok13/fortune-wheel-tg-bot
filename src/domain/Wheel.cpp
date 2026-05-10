@@ -5,12 +5,28 @@
 #include <algorithm>
 #include <utility>
 
-void Wheel::addItem(std::string name) {
+void Wheel::setName(const std::string & name) {
+    name_ = name;
+}
+
+void Wheel::addItem(const std::string & name) {
     WheelItem item;
     item.id = std::to_string(items_.size() + 1);
     item.name = std::move(name);
     item.active = true;
     items_.push_back(std::move(item));
+}
+
+void Wheel::renameItem(const std::string& oldName, const std::string& newName) {
+    const auto itemIt = std::find_if(items_.begin(), items_.end(), [&oldName](const WheelItem& item) {
+        return item.name == oldName;
+    });
+
+    if (itemIt == items_.end()) {
+        throw WheelItemNotFoundException("Item not found: " + oldName);
+    }
+
+    itemIt->name = newName;
 }
 
 void Wheel::removeItem(const std::string& name) {
@@ -32,6 +48,8 @@ void Wheel::reset() {
         item.active = true;
     }
 }
+
+const std::string & Wheel::getName() const { return name_; }
 
 const std::vector<WheelItem>& Wheel::items() const { return items_; }
 
