@@ -83,7 +83,7 @@ std::optional<ParsedCommand> CommandParser::parse(const std::string& text) const
     }
     rest = trimView(rest);
 
-    const auto separatorPos = rest.find_first_of(std::string_view{":"});
+    const auto separatorPos = rest.find_first_of(std::string_view{" :"});
 
     std::string rawCommand;
     std::optional<std::string> argument;
