@@ -34,7 +34,7 @@ nlohmann::json TelegramClient::sendMessage(int64_t chatId, const std::string& te
     HttpRequest request{http::verb::post, apiTarget("sendMessage"), 11};
     request.set(http::field::content_type, "application/json");
 
-    nlohmann::json body{{"chat_id", chatId}, {"text", text}};
+    nlohmann::json body{{"chat_id", chatId}, {"text", text}, {"parse_mode", "HTML"}};
     request.body() = body.dump();
     request.prepare_payload();
 
@@ -46,7 +46,7 @@ nlohmann::json TelegramClient::editMessageText(int64_t chatId, int messageId, co
     HttpRequest request{http::verb::post, apiTarget("editMessageText"), 11};
     request.set(http::field::content_type, "application/json");
 
-    nlohmann::json body{{"chat_id", chatId}, {"message_id", messageId}, {"text", text}};
+    nlohmann::json body{{"chat_id", chatId}, {"message_id", messageId}, {"text", text}, {"parse_mode", "HTML"}};
     request.body() = body.dump();
     request.prepare_payload();
 

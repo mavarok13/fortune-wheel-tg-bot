@@ -7,12 +7,81 @@
 #include <algorithm>
 #include <cctype>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 
 namespace {
+std::string commandPrefix() {
+    return std::string(COMMAND_BEGINNING.data(), COMMAND_BEGINNING.size());
+}
+
+std::string escapeHtml(std::string_view value) {
+    std::string escaped;
+    escaped.reserve(value.size());
+
+    for (const char ch : value) {
+        switch (ch) {
+        case '&':
+            escaped += "&amp;";
+            break;
+        case '<':
+            escaped += "&lt;";
+            break;
+        case '>':
+            escaped += "&gt;";
+            break;
+        case '\"':
+            escaped += "&quot;";
+            break;
+        default:
+            escaped += ch;
+            break;
+        }
+    }
+
+    return escaped;
+}
+
+std::string code(std::string_view value) {
+    return "<code>" + escapeHtml(value) + "</code>";
+}
+
+std::string bold(std::string_view value) {
+    return "<b>" + escapeHtml(value) + "</b>";
+}
+
+std::string wheelNotSelectedMessage() {
+    return "No wheel selected yet. Try " + code("/wheelnew") + " or " + code("/wheelchoose your_wheel") + ".";
+}
+
+std::string formatHelpMessage() {
+    const auto prefix = commandPrefix();
+    std::ostringstream message;
+    message << "<b>Welcome to " << escapeHtml(prefix) << "</b>\n";
+    message << "Let the wheel handle the dramatic decision-making.\n\n";
+    message << bold("How to talk to me") << "\n";
+    message << code(prefix + " command: argument") << " or " << code("/command argument") << "\n\n";
+    message << bold("Commands") << "\n";
+    message << code("help") << " - show all commands\n";
+    message << code("itemadd item_name") << " - add a new item\n";
+    message << code("itemedit old_name:new_name") << " - rename an item\n";
+    message << code("itemremove item_name") << " - remove an item\n";
+    message << code("itemslist") << " - show items in the current wheel\n";
+    message << code("wheelnew") << " - create a fresh wheel\n";
+    message << code("wheelsave wheel_name") << " - save the current wheel\n";
+    message << code("wheelchoose wheel_name") << " - select a saved wheel\n";
+    message << code("wheeldelete wheel_name") << " - delete a saved wheel\n";
+    message << code("wheelmode choice") << " or " << code("wheelmode elimination") << " - choose the game mode\n";
+    message << code("wheelspin") << " - spin the wheel\n";
+    message << code("wheelreset") << " - reactivate excluded items\n";
+    message << code("wheelclear") << " - remove all items from the current wheel\n";
+    message << code("wheelslist") << " - list saved wheels";
+    return message.str();
+}
+
 std::string toLower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
         return static_cast<char>(std::tolower(ch));
@@ -114,27 +183,27 @@ void BotController::handleUpdate(const nlohmann::json& update) {
     } catch (const WheelNotSelectedException& ex) {
         std::cerr << "Wheel selection error: " << ex.what() << std::endl;
         if (chatId != 0) {
-            reply(chatId, "No wheel selected. Create or choose a wheel first.");
+            reply(chatId, wheelNotSelectedMessage());
         }
     } catch (const WheelItemNotFoundException& ex) {
         std::cerr << "Wheel item error: " << ex.what() << std::endl;
         if (chatId != 0) {
-            reply(chatId, ex.what());
+            reply(chatId, escapeHtml(ex.what()));
         }
     } catch (const WheelNotFoundException& ex) {
         std::cerr << "Wheel lookup error: " << ex.what() << std::endl;
         if (chatId != 0) {
-            reply(chatId, ex.what());
+            reply(chatId, escapeHtml(ex.what()));
         }
     } catch (const InvalidWheelOperationException& ex) {
         std::cerr << "Invalid wheel operation: " << ex.what() << std::endl;
         if (chatId != 0) {
-            reply(chatId, ex.what());
+            reply(chatId, escapeHtml(ex.what()));
         }
     } catch (const std::runtime_error& ex) {
         std::cerr << "Runtime error while handling update: " << ex.what() << std::endl;
         if (chatId != 0) {
-            reply(chatId, ex.what());
+            reply(chatId, escapeHtml(ex.what()));
         }
     } catch (const std::exception& ex) {
         std::cerr << "Failed to handle update: " << ex.what() << std::endl;
@@ -157,8 +226,13 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
     };
 
     switch (command.type) {
+    case BotCommandType::Start:
+    case BotCommandType::Help: {
+        reply(chatId, formatHelpMessage());
+        return;
+    }
     case BotCommandType::Secret: {
-        reply(chatId, "Я ЛЮБЛЮ ТЕБЯ, МОЯ КИСОНЬКА! <3");
+        reply(chatId, "<b>Я ЛЮБЛЮ ТЕБЯ, МОЯ КИСОНЬКА!</b> &lt;3");
         return;
     }
     case BotCommandType::ItemAdd: {
@@ -171,38 +245,38 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
         wheelManager_.addItem(itemName);
         const auto wheelName = wheelManager_.currentWheel().getName();
         if (wheelName.empty()) {
-            reply(chatId, "Added item \"" + itemName + "\".");
+            reply(chatId, "Added " + code(itemName) + " to the wheel.");
         } else {
-            reply(chatId, "Added item \"" + itemName + "\" to wheel \"" + wheelName + "\".");
+            reply(chatId, "Added " + code(itemName) + " to wheel " + code(wheelName) + ".");
         }
         return;
     }
     case BotCommandType::ItemEdit: {
         if (!selectLastWheelForUser()) {
-            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            reply(chatId, wheelNotSelectedMessage());
             return;
         }
 
         const auto renameArgument = requireArgument(command);
         const auto [oldName, newName] = parseItemRenameArgument(renameArgument);
         wheelManager_.currentWheel().renameItem(oldName, newName);
-        reply(chatId, "Renamed item \"" + oldName + "\" to \"" + newName + "\".");
+        reply(chatId, "Renamed " + code(oldName) + " to " + code(newName) + ".");
         return;
     }
     case BotCommandType::ItemRemove: {
         if (!selectLastWheelForUser()) {
-            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            reply(chatId, wheelNotSelectedMessage());
             return;
         }
 
         const auto itemName = requireArgument(command);
         wheelManager_.removeItem(itemName);
-        reply(chatId, "Deleted item: " + itemName);
+        reply(chatId, "Removed " + code(itemName) + ".");
         return;
     }
     case BotCommandType::WheelSave: {
         if (!selectLastWheelForUser()) {
-            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            reply(chatId, wheelNotSelectedMessage());
             return;
         }
 
@@ -212,26 +286,26 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
         currentWheel.setName(wheelName);
         storage_.addWheel(wheelId, currentWheel);
         setCurrentWheel(userKey, wheelId);
-        reply(chatId, "Wheel saved and selected: " + wheelName);
+        reply(chatId, "Saved and selected wheel " + code(wheelName) + ".");
         return;
     }
     case BotCommandType::ItemsList: {
         if (!selectLastWheelForUser()) {
-            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            reply(chatId, wheelNotSelectedMessage());
             return;
         }
 
         auto & wheel = wheelManager_.currentWheel();
         if (wheel.items().empty()) {
-            reply(chatId, "Wheel \"" + wheel.getName() + "\" has no items.");
+            reply(chatId, "Wheel " + code(wheel.getName()) + " has no items yet.");
             return;
         }
 
-        std::string itemsListStr = "Wheel \"" + wheel.getName() + "\" items list:\n";
+        std::string itemsListStr = bold("Items in " + wheel.getName()) + "\n";
         for (const auto & item : wheel.items()) {
-            itemsListStr += "- " + item.name;
+            itemsListStr += "- " + code(item.name);
             if (!item.active) {
-                itemsListStr += " (inactive)";
+                itemsListStr += " <i>(inactive)</i>";
             }
             itemsListStr += "\n";
         }
@@ -245,27 +319,27 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
         try {
             setCurrentWheel(userKey, storageId);
         } catch (const WheelNotFoundException&) {
-            reply(chatId, "Wheel not found: " + wheelName);
+            reply(chatId, "Wheel not found: " + code(wheelName));
             return;
         }
-        reply(chatId, "Selected wheel: " + wheelName);
+        reply(chatId, "Selected wheel " + code(wheelName) + ".");
         return;
     }
     case BotCommandType::WheelMode: {
         if (!selectLastWheelForUser()) {
-            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            reply(chatId, wheelNotSelectedMessage());
             return;
         }
 
         const auto modeArgument = requireArgument(command);
         const auto mode = wheelModeFromArgument(modeArgument);
         wheelManager_.setMode(mode);
-        reply(chatId, "Mode set to: " + wheelModeToString(mode));
+        reply(chatId, "Mode set to " + code(wheelModeToString(mode)) + ".");
         return;
     }
     case BotCommandType::WheelSpin: {
         if (!selectLastWheelForUser()) {
-            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            reply(chatId, wheelNotSelectedMessage());
             return;
         }
 
@@ -288,48 +362,49 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
                     ++activeItemsCount;
                 }
             }
-        
+            
             if (activeItemsCount <= 1) {
                 wheel.reset();
                 if (lastActiveItem) {
-                    reply(chatId, "Excluded: " + selectedItemName + "\nWINNER: " + lastActiveItem->name + "\n(wheel has been reseted)");
+                    reply(chatId, bold("Excluded") + ": " + code(selectedItemName) + "\n" +
+                        bold("Winner") + ": " + code(lastActiveItem->name) + "\n<i>(wheel has been reset)</i>");
                 } else {
-                    reply(chatId, "WINNER: " + selectedItemName + "\n(wheel has been reseted)");
+                    reply(chatId, bold("Winner") + ": " + code(selectedItemName) + "\n<i>(wheel has been reset)</i>");
                 }
                 return;
             }
 
-            std::string eliminationReplyMsg = "Excluded: " + selectedItemName + "\nRemaining:\n";
+            std::string eliminationReplyMsg = bold("Excluded") + ": " + code(selectedItemName) + "\n" + bold("Remaining") + "\n";
             for (const auto & item : wheel.items()) {
                 if (item.active) {
-                    eliminationReplyMsg += "- " + item.name + "\n";
+                    eliminationReplyMsg += "- " + code(item.name) + "\n";
                 }
             }
             eliminationReplyMsg.erase(eliminationReplyMsg.end()-1);
             reply(chatId, eliminationReplyMsg);
             return;
         }
-        reply(chatId, "Selected: " + selectedItemName);
+        reply(chatId, bold("Selected") + ": " + code(selectedItemName));
 
         return;
     }
     case BotCommandType::WheelReset:
         if (!selectLastWheelForUser()) {
-            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            reply(chatId, wheelNotSelectedMessage());
             return;
         }
 
         wheelManager_.reset();
-        reply(chatId, "Wheel reset.");
+        reply(chatId, "Wheel reset. Everybody is back in the game.");
         return;
     case BotCommandType::WheelClear:
         if (!selectLastWheelForUser()) {
-            reply(chatId, "Wheel not selected. Try add new item or select wheel");
+            reply(chatId, wheelNotSelectedMessage());
             return;
         }
 
         wheelManager_.clear();
-        reply(chatId, "Wheel cleared.");
+        reply(chatId, "Wheel cleared. A clean slate awaits.");
         return;
     case BotCommandType::WheelDelete: {
         const auto wheelName = requireArgument(command);
@@ -339,7 +414,7 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
         try {
             storage_.removeWheel(storageId);
         } catch (const WheelNotFoundException&) {
-            reply(chatId, "Wheel not found: " + wheelName);
+            reply(chatId, "Wheel not found: " + code(wheelName));
             return;
         }
 
@@ -348,20 +423,20 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
             setCurrentWheel(userKey, userKey, true);
         }
 
-        reply(chatId, "Deleted wheel: " + wheelName);
+        reply(chatId, "Deleted wheel " + code(wheelName) + ".");
         return;
     }
     case BotCommandType::WheelNew: {
         storage_.addTempWheel(userKey, Wheel{});
         std::string wheelId = userKey;
         setCurrentWheel(userKey, wheelId, true);
-        reply(chatId, "New wheel created");
+        reply(chatId, "Fresh wheel created. Start feeding it choices.");
         return;
     }
     case BotCommandType::WheelsList: {
         const auto wheelNames = storage_.listWheelNamesForUser(userKey);
         if (wheelNames.empty()) {
-            reply(chatId, "No saved wheels.");
+            reply(chatId, "No saved wheels yet.");
             return;
         }
 
@@ -370,11 +445,11 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
             currentWheelName = wheelManager_.currentWheel().getName();
         }
 
-        std::string wheelList = "Saved wheels:\n";
+        std::string wheelList = bold("Saved wheels") + "\n";
         for (const auto& wheelName : wheelNames) {
-            wheelList += "- " + wheelName;
+            wheelList += "- " + code(wheelName);
             if (wheelName == currentWheelName) {
-                wheelList += " (selected)";
+                wheelList += " <i>(selected)</i>";
             }
             wheelList += "\n";
         }
@@ -383,7 +458,7 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
         return;
     }
     case BotCommandType::Unknown:
-        reply(chatId, "Unknown command.");
+        reply(chatId, "Unknown command. Try " + code("/help") + ".");
         return;
     }
 }
@@ -402,7 +477,7 @@ void BotController::setCurrentWheel(const std::string & userId, const std::strin
 
 std::string BotController::requireArgument(const ParsedCommand& command) const {
     if (!command.argument.has_value() || command.argument->empty()) {
-        throw InvalidWheelOperationException("Missing argument for command");
+        throw InvalidWheelOperationException("Missing argument for command. Check /help for the expected format.");
     }
     return *command.argument;
 }
