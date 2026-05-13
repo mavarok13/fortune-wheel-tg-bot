@@ -279,9 +279,38 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
         const auto selectedItemName = wheel.itemAt(*selectedIndex).name;
         if (wheel.mode() == WheelMode::Elimination) {
             wheel.deactivateItem(*selectedIndex);
-        }
 
+            int activeItemsCount = 0;
+            const WheelItem * lastActiveItem = nullptr;
+            for(const auto & item : wheel.items()) {
+                if (item.active) {
+                    lastActiveItem = &item;
+                    ++activeItemsCount;
+                }
+            }
+        
+            if (activeItemsCount <= 1) {
+                wheel.reset();
+                if (lastActiveItem) {
+                    reply(chatId, "Excluded: " + selectedItemName + "\nWINNER: " + lastActiveItem->name + "\n(wheel has been reseted)");
+                } else {
+                    reply(chatId, "WINNER: " + selectedItemName + "\n(wheel has been reseted)");
+                }
+                return;
+            }
+
+            std::string eliminationReplyMsg = "Excluded: " + selectedItemName + "\nRemaining:\n";
+            for (const auto & item : wheel.items()) {
+                if (item.active) {
+                    eliminationReplyMsg += "- " + item.name + "\n";
+                }
+            }
+            eliminationReplyMsg.erase(eliminationReplyMsg.end()-1);
+            reply(chatId, eliminationReplyMsg);
+            return;
+        }
         reply(chatId, "Selected: " + selectedItemName);
+
         return;
     }
     case BotCommandType::WheelReset:
