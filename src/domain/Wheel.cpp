@@ -3,30 +3,63 @@
 #include "DomainExceptions.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
-void Wheel::setName(const std::string & name) {
-    name_ = name;
+namespace {
+WheelItem& findItemByName(std::vector<WheelItem>& items, const std::string& name) {
+    const auto itemIt = std::find_if(items.begin(), items.end(), [&name](const WheelItem& item) {
+        return item.name == name;
+    });
+
+    if (itemIt == items.end()) {
+        throw WheelItemNotFoundException("Item not found: " + name);
+    }
+
+    return *itemIt;
 }
 
-void Wheel::addItem(const std::string & name) {
+void ensurePositiveScore(std::uint64_t score) {
+    if (score == 0) {
+        throw InvalidWheelOperationException("Item score must be greater than 0");
+    }
+}
+} // namespace
+
+void Wheel::setName(const std::string & name) { name_ = name; }
+
+void Wheel::addItem(const std::string & name, std::uint64_t score) {
+    ensurePositiveScore(score);
+
     WheelItem item;
     item.id = std::to_string(items_.size() + 1);
     item.name = std::move(name);
     item.active = true;
+    item.score = score;
     items_.push_back(std::move(item));
 }
 
 void Wheel::renameItem(const std::string& oldName, const std::string& newName) {
-    const auto itemIt = std::find_if(items_.begin(), items_.end(), [&oldName](const WheelItem& item) {
-        return item.name == oldName;
-    });
+    auto& itemIt = findItemByName(items_, oldName);
+    itemIt.name = newName;
+}
 
-    if (itemIt == items_.end()) {
-        throw WheelItemNotFoundException("Item not found: " + oldName);
+void Wheel::setItemScore(const std::string& name, std::uint64_t score) {
+    ensurePositiveScore(score);
+
+    auto& itemIt = findItemByName(items_, name);
+    itemIt.score = score;
+}
+
+void Wheel::addItemScore(const std::string& name, std::uint64_t scoreDelta) {
+    ensurePositiveScore(scoreDelta);
+
+    auto& itemIt = findItemByName(items_, name);
+    if (itemIt.score > std::numeric_limits<std::uint64_t>::max() - scoreDelta) {
+        throw InvalidWheelOperationException("Item score is too large");
     }
 
-    itemIt->name = newName;
+    itemIt.score += scoreDelta;
 }
 
 void Wheel::removeItem(const std::string& name) {

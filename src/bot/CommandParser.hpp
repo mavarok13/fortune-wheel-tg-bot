@@ -10,6 +10,8 @@ enum class BotCommandType {
     Help,
     ItemAdd,
     ItemEdit,
+    ItemScore,
+    ItemBet,
     ItemRemove,
     ItemsList,
     WheelSave,

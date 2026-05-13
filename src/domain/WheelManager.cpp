@@ -26,7 +26,15 @@ const Wheel& WheelManager::currentWheel() const {
     return *currentWheel_;
 }
 
-void WheelManager::addItem(std::string name) { currentWheel().addItem(std::move(name)); }
+void WheelManager::addItem(std::string name, std::uint64_t score) { currentWheel().addItem(std::move(name), score); }
+
+void WheelManager::setItemScore(const std::string& name, std::uint64_t score) {
+    currentWheel().setItemScore(name, score);
+}
+
+void WheelManager::addItemScore(const std::string& name, std::uint64_t scoreDelta) {
+    currentWheel().addItemScore(name, scoreDelta);
+}
 
 void WheelManager::removeItem(const std::string& name) { currentWheel().removeItem(name); }
 
@@ -40,10 +48,16 @@ std::optional<size_t> WheelManager::chooseIndex() {
     const auto& wheel = currentWheel();
 
     std::vector<size_t> active;
+    std::vector<double> weights;
     const auto& items = wheel.items();
     for (size_t i = 0; i < items.size(); ++i) {
         if (items[i].active) {
             active.push_back(i);
+            if (wheel.mode() == WheelMode::Elimination) {
+                weights.push_back(1.0 / static_cast<double>(items[i].score));
+            } else {
+                weights.push_back(static_cast<double>(items[i].score));
+            }
         }
     }
 
@@ -52,6 +66,6 @@ std::optional<size_t> WheelManager::chooseIndex() {
     }
 
     static thread_local std::mt19937 rng{std::random_device{}()};
-    std::uniform_int_distribution<size_t> dist(0, active.size() - 1);
+    std::discrete_distribution<size_t> dist(weights.begin(), weights.end());
     return active[dist(rng)];
 }

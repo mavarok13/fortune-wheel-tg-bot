@@ -46,6 +46,8 @@ BotCommandType commandTypeFromName(const std::string& commandName) {
         {HELP_COMMAND, BotCommandType::Help},
         {ITEM_ADD_COMMAND, BotCommandType::ItemAdd},
         {ITEM_EDIT_COMMAND, BotCommandType::ItemEdit},
+        {ITEM_SCORE_COMMAND, BotCommandType::ItemScore},
+        {ITEM_BET_COMMAND, BotCommandType::ItemBet},
         {ITEM_REMOVE_COMMAND, BotCommandType::ItemRemove},
         {ITEMS_LIST_COMMAND, BotCommandType::ItemsList},
         {WHEEL_SAVE_COMMAND, BotCommandType::WheelSave},

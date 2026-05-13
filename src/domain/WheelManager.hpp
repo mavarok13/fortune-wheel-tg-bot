@@ -3,6 +3,7 @@
 #include "Wheel.hpp"
 #include "WheelItem.hpp"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -14,7 +15,9 @@ public:
     Wheel& currentWheel();
     const Wheel& currentWheel() const;
 
-    void addItem(std::string name);
+    void addItem(std::string name, std::uint64_t score = 1);
+    void setItemScore(const std::string& name, std::uint64_t score);
+    void addItemScore(const std::string& name, std::uint64_t scoreDelta);
     void removeItem(const std::string& name);
     void reset();
     void clear();

@@ -3,6 +3,7 @@
 #include "WheelItem.hpp"
 #include "WheelMode.hpp"
 
+#include <cstdint>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -11,8 +12,10 @@ class Wheel {
 public:
     void setName(const std::string & name);
 
-    void addItem(const std::string & name);
+    void addItem(const std::string & name, std::uint64_t score = 1);
     void renameItem(const std::string& oldName, const std::string& newName);
+    void setItemScore(const std::string& name, std::uint64_t score);
+    void addItemScore(const std::string& name, std::uint64_t scoreDelta);
     void removeItem(const std::string& name);
     void clear();
     void reset();

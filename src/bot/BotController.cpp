@@ -5,7 +5,9 @@
 #include "storage/WheelStorageKey.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cctype>
+#include <cstdint>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -14,6 +16,8 @@
 #include <utility>
 
 namespace {
+std::string trim(std::string_view value);
+
 std::string commandPrefix() {
     return std::string(COMMAND_BEGINNING.data(), COMMAND_BEGINNING.size());
 }
@@ -57,6 +61,51 @@ std::string wheelNotSelectedMessage() {
     return "No wheel selected yet. Try " + code("/wheelnew") + " or " + code("/wheelchoose your_wheel") + ".";
 }
 
+std::uint64_t parsePositiveScore(std::string_view value) {
+    const auto trimmedValue = trim(value);
+    if (trimmedValue.empty()) {
+        throw InvalidWheelOperationException("Score must be a positive integer");
+    }
+
+    std::uint64_t score = 0;
+    const auto parseResult = std::from_chars(
+        trimmedValue.data(),
+        trimmedValue.data() + trimmedValue.size(),
+        score);
+    if (parseResult.ec != std::errc{} || parseResult.ptr != trimmedValue.data() + trimmedValue.size() || score == 0) {
+        throw InvalidWheelOperationException("Score must be a positive integer");
+    }
+
+    return score;
+}
+
+std::pair<std::string, std::uint64_t> parseItemScoreArgument(const std::string& value, std::string_view usage) {
+    const auto separatorPos = value.find(CommandArgumentSeparator);
+    if (separatorPos == std::string::npos) {
+        throw InvalidWheelOperationException(std::string("Use ") + std::string(usage));
+    }
+
+    const auto itemName = trim(value.substr(0, separatorPos));
+    if (itemName.empty()) {
+        throw InvalidWheelOperationException(std::string("Use ") + std::string(usage));
+    }
+
+    return {itemName, parsePositiveScore(value.substr(separatorPos + 1))};
+}
+
+std::pair<std::string, std::uint64_t> parseItemAddArgument(const std::string& value) {
+    const auto separatorPos = value.find(CommandArgumentSeparator);
+    if (separatorPos == std::string::npos) {
+        const auto itemName = trim(value);
+        if (itemName.empty()) {
+            throw InvalidWheelOperationException("Use itemadd item_name[:score]");
+        }
+        return {itemName, 1};
+    }
+
+    return parseItemScoreArgument(value, "itemadd item_name:score");
+}
+
 std::string formatHelpMessage() {
     const auto prefix = commandPrefix();
     std::ostringstream message;
@@ -64,10 +113,14 @@ std::string formatHelpMessage() {
     message << "Let the wheel handle the dramatic decision-making.\n\n";
     message << bold("How to talk to me") << "\n";
     message << code(prefix + " command: argument") << " or " << code("/command argument") << "\n\n";
+    message << "Each item starts with score " << code("1") << ". Bigger score means better odds in " << code("choice")
+            << " mode and better survival in " << code("elimination") << " mode.\n\n";
     message << bold("Commands") << "\n";
     message << code("help") << " - show all commands\n";
-    message << code("itemadd item_name") << " - add a new item\n";
+    message << code("itemadd item_name[:score]") << " - add a new item with optional score\n";
     message << code("itemedit old_name:new_name") << " - rename an item\n";
+    message << code("itemscore item_name:score") << " - set an item's score\n";
+    message << code("itembet item_name:score") << " - add score to an item\n";
     message << code("itemremove item_name") << " - remove an item\n";
     message << code("itemslist") << " - show items in the current wheel\n";
     message << code("wheelnew") << " - create a fresh wheel\n";
@@ -241,13 +294,13 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
             setCurrentWheel(userKey, userKey, true);
         }
 
-        const auto itemName = requireArgument(command);
-        wheelManager_.addItem(itemName);
+        const auto [itemName, itemScore] = parseItemAddArgument(requireArgument(command));
+        wheelManager_.addItem(itemName, itemScore);
         const auto wheelName = wheelManager_.currentWheel().getName();
         if (wheelName.empty()) {
-            reply(chatId, "Added " + code(itemName) + " to the wheel.");
+            reply(chatId, "Added " + code(itemName) + " with score " + code(std::to_string(itemScore)) + " to the wheel.");
         } else {
-            reply(chatId, "Added " + code(itemName) + " to wheel " + code(wheelName) + ".");
+            reply(chatId, "Added " + code(itemName) + " with score " + code(std::to_string(itemScore)) + " to wheel " + code(wheelName) + ".");
         }
         return;
     }
@@ -261,6 +314,28 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
         const auto [oldName, newName] = parseItemRenameArgument(renameArgument);
         wheelManager_.currentWheel().renameItem(oldName, newName);
         reply(chatId, "Renamed " + code(oldName) + " to " + code(newName) + ".");
+        return;
+    }
+    case BotCommandType::ItemScore: {
+        if (!selectLastWheelForUser()) {
+            reply(chatId, wheelNotSelectedMessage());
+            return;
+        }
+
+        const auto [itemName, itemScore] = parseItemScoreArgument(requireArgument(command), "itemscore item_name:score");
+        wheelManager_.setItemScore(itemName, itemScore);
+        reply(chatId, "Set score of " + code(itemName) + " to " + code(std::to_string(itemScore)) + ".");
+        return;
+    }
+    case BotCommandType::ItemBet: {
+        if (!selectLastWheelForUser()) {
+            reply(chatId, wheelNotSelectedMessage());
+            return;
+        }
+
+        const auto [itemName, betScore] = parseItemScoreArgument(requireArgument(command), "itembet item_name:score");
+        wheelManager_.addItemScore(itemName, betScore);
+        reply(chatId, "Placed a bet of " + code(std::to_string(betScore)) + " on " + code(itemName) + ".");
         return;
     }
     case BotCommandType::ItemRemove: {
@@ -304,6 +379,7 @@ void BotController::handleCommand(int64_t chatId, int64_t userId, const ParsedCo
         std::string itemsListStr = bold("Items in " + wheel.getName()) + "\n";
         for (const auto & item : wheel.items()) {
             itemsListStr += "- " + code(item.name);
+            itemsListStr += " <i>(score: " + escapeHtml(std::to_string(item.score)) + ")</i>";
             if (!item.active) {
                 itemsListStr += " <i>(inactive)</i>";
             }
